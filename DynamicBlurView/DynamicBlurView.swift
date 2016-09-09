@@ -9,69 +9,59 @@
 import UIKit
 import Accelerate
 
-public class DynamicBlurView: UIView {
-    private class BlurLayer: CALayer {
+open class DynamicBlurView: UIView {
+    fileprivate class BlurLayer: CALayer {
         static let BlurRadiusKey = "blurRadius"
         @NSManaged var blurRadius: CGFloat
         
-        override class func needsDisplayForKey(key: String) -> Bool {
+        override class func needsDisplay(forKey key: String) -> Bool {
             if key == BlurRadiusKey {
                 return true
             }
-            return super.needsDisplayForKey(key)
+            return super.needsDisplay(forKey: key)
         }
     }
     
     public enum DynamicMode {
-        case Tracking   // refresh only scrolling
-        case Common     // always refresh
-        case None       // not refresh
+        case tracking   // refresh only scrolling
+        case common     // always refresh
+        case none       // not refresh
         
-        func mode() -> String {
+        func mode() -> RunLoopMode? {
             switch self {
-            case .Tracking:
-                return UITrackingRunLoopMode
-            case .Common:
-                return NSRunLoopCommonModes
-            case .None:
-                return ""
+            case .tracking:
+                return RunLoopMode.UITrackingRunLoopMode
+            case .common:
+                return RunLoopMode.commonModes
+            case .none:
+                return nil
             }
         }
     }
     
-    private var staticImage: UIImage?
-    private var fromBlurRadius: CGFloat?
-    private var displayLink: CADisplayLink?
-    private let DisplayLinkSelector: Selector = "displayDidRefresh:"
-    private var blurLayer: BlurLayer {
+    fileprivate var staticImage: UIImage?
+    fileprivate var fromBlurRadius: CGFloat?
+    fileprivate var displayLink: CADisplayLink?
+	
+    fileprivate var blurLayer: BlurLayer {
         return layer as! BlurLayer
     }
     
-    private var blurPresentationLayer: BlurLayer {
-		guard let layer = blurLayer.presentationLayer() else {
-			return blurLayer
-		}
-		guard let blayer = layer as? BlurLayer else {
-			return blurLayer
-		}
-		return blayer
+    fileprivate var blurPresentationLayer: BlurLayer {
+		return blurLayer
     }
     
-    private var queue: dispatch_queue_t {
-        if respondsToSelector("maskView") { // #available (iOS 8.0, *)
-            return dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0)
-        } else {
-            return dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0)
-        }
+    fileprivate var queue: DispatchQueue {
+		return DispatchQueue.global(qos: DispatchQoS.userInteractive.qosClass)
     }
     
-    public var blurRadius: CGFloat {
+    open var blurRadius: CGFloat {
         set { blurLayer.blurRadius = newValue }
         get { return blurLayer.blurRadius }
     }
     
     /// Default is Tracking.
-    public var dynamicMode: DynamicMode = .None {
+    open var dynamicMode: DynamicMode = .none {
         didSet {
             if dynamicMode != oldValue {
                 linkForDisplay()
@@ -80,42 +70,42 @@ public class DynamicBlurView: UIView {
     }
     
     /// Blend color.
-    public var blendColor: UIColor?
+    open var blendColor: UIColor?
     
     /// Default is 3.
-    public var iterations: Int = 3
+    open var iterations: Int = 3
     
     /// Please be on true if the if Layer is not captured. Such as UINavigationBar and UIToolbar. Can be used only with DynamicMode.None.
-    public var fullScreenCapture: Bool = false
+    open var fullScreenCapture: Bool = false
     
     /// Ratio of radius. Defauot is 1.
-    public var blurRatio: CGFloat = 1 {
+    open var blurRatio: CGFloat = 1 {
         didSet {
             if oldValue != blurRatio {
                 if let image = staticImage {
-                    setCaptureImage(image, radius: blurRadius)
+                    setCapture(image, radius: blurRadius)
                 }
             }
         }
     }
-    
-    public override class func layerClass() -> AnyClass {
-        return BlurLayer.self
-    }
-    
+	
+	open override class var layerClass: AnyClass {
+		return BlurLayer.self
+	}
+	
     public override init(frame: CGRect) {
         super.init(frame: frame)
         
-        userInteractionEnabled = false
+        isUserInteractionEnabled = false
     }
     
     public required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
         
-        userInteractionEnabled = false
+        isUserInteractionEnabled = false
     }
     
-    public override func didMoveToSuperview() {
+    open override func didMoveToSuperview() {
         super.didMoveToSuperview()
         
         if superview == nil {
@@ -125,18 +115,18 @@ public class DynamicBlurView: UIView {
             linkForDisplay()
         }
     }
-    
-    public override func actionForLayer(layer: CALayer, forKey event: String) -> CAAction? {
+	
+    open override func action(for layer: CALayer, forKey event: String) -> CAAction? {
         if event == BlurLayer.BlurRadiusKey {
             fromBlurRadius = nil
             
-            if dynamicMode == .None {
+            if dynamicMode == .none {
                 staticImage = capturedImage()
             } else {
                 staticImage = nil
             }
             
-            if let action = super.actionForLayer(layer, forKey: "backgroundColor") as? CAAnimation {
+			if let action = super.action(for: layer, forKey: "backgroundColor") as? CAAnimation {
                 fromBlurRadius = blurPresentationLayer.blurRadius
                 
                 let animation = CABasicAnimation()
@@ -158,14 +148,14 @@ public class DynamicBlurView: UIView {
             }
         }
         
-        return super.actionForLayer(layer, forKey: event)
+		return super.action(for: layer, forKey: event)
     }
     
-    public override func displayLayer(layer: CALayer) {
+    open override func display(_ layer: CALayer) {
         let blurRadius: CGFloat
         
         if let radius = fromBlurRadius {
-            if layer.presentationLayer() == nil {
+            if layer.presentation() == nil {
                 blurRadius = radius
             } else {
                 blurRadius = blurPresentationLayer.blurRadius
@@ -173,69 +163,72 @@ public class DynamicBlurView: UIView {
         } else {
             blurRadius = blurLayer.blurRadius
         }
-        
-        dispatch_async(queue) {
+		
+		queue.async {
             if let capture = self.staticImage ?? self.capturedImage() {
-                self.setCaptureImage(capture, radius: blurRadius)
+                self.setCapture(capture, radius: blurRadius)
             }
         }
     }
     
     /// Get blur image again. for DynamicMode.None
-    public func refresh() {
+    open func refresh() {
         staticImage = nil
         fromBlurRadius = nil
         blurRatio = 1
-        displayLayer(blurLayer)
+        display(blurLayer)
     }
     
     /// Delete blur image. for DynamicMode.None
-    public func remove() {
+    open func remove() {
         staticImage = nil
         fromBlurRadius = nil
         blurRatio = 1
         layer.contents = nil
     }
     
-    private func linkForDisplay() {
+    fileprivate func linkForDisplay() {
         displayLink?.invalidate()
-        displayLink = UIScreen.mainScreen().displayLinkWithTarget(self, selector: DisplayLinkSelector)
-        displayLink?.addToRunLoop(NSRunLoop.mainRunLoop(), forMode: dynamicMode.mode())
+        displayLink = UIScreen.main.displayLink(withTarget: self, selector: #selector(displayDidRefresh(_:)))
+		guard let runloopMode = dynamicMode.mode() else {
+			return
+		}
+        displayLink?.add(to: RunLoop.main, forMode: runloopMode)
     }
     
-    private func setCaptureImage(image: UIImage, radius: CGFloat) {
+    fileprivate func setCapture(_ image: UIImage, radius: CGFloat) {
         let setImage: (() -> Void) = {
             if let blurredImage = image.blurredImage(radius, iterations: self.iterations, ratio: self.blurRatio, blendColor: self.blendColor) {
-                dispatch_sync(dispatch_get_main_queue()) {
+				DispatchQueue.main.sync {
                     self.setContentImage(blurredImage)
                 }
             }
         }
         
-        if NSThread.currentThread().isMainThread {
-            dispatch_async(queue, setImage)
+        if Thread.current.isMainThread {
+			queue.async(execute: setImage)
         } else {
             setImage()
         }
     }
     
-    private func setContentImage(image: UIImage) {
-        layer.contents = image.CGImage
+    fileprivate func setContentImage(_ image: UIImage) {
+        layer.contents = image.cgImage
         layer.contentsScale = image.scale
     }
     
-    private func prepareLayer() -> [CALayer]? {
+    fileprivate func prepareLayer() -> [CALayer]? {
         let sublayers = superview?.layer.sublayers
         
-        return sublayers?.reduce([], combine: { acc, layer -> [CALayer] in
+        return sublayers?.reduce([], { acc, layer -> [CALayer] in
             if acc.isEmpty {
                 if layer != self.blurLayer {
                     return acc
                 }
             }
             
-            if layer.hidden == false {
-                layer.hidden = true
+            if layer.isHidden == false {
+                layer.isHidden = true
                 
                 return acc + [layer]
             }
@@ -244,26 +237,26 @@ public class DynamicBlurView: UIView {
         })
     }
     
-    private func restoreLayer(layers: [CALayer]) {
+    fileprivate func restoreLayers(_ layers: [CALayer]) {
         for layer in layers {
-            layer.hidden = false
+            layer.isHidden = false
         }
     }
     
-    private func capturedImage() -> UIImage? {
-        let bounds = blurLayer.convertRect(blurLayer.bounds, toLayer: superview?.layer)
+    fileprivate func capturedImage() -> UIImage? {
+        let bounds = blurLayer.convert(blurLayer.bounds, to: superview?.layer)
 		
         UIGraphicsBeginImageContextWithOptions(bounds.size, true, 1)
 		guard let context = UIGraphicsGetCurrentContext() else {
 			return nil
 		}
-        CGContextSetInterpolationQuality(context, CGInterpolationQuality.None)
-        CGContextTranslateCTM(context, -bounds.origin.x, -bounds.origin.y)
+        context.interpolationQuality = CGInterpolationQuality.none
+        context.translateBy(x: -bounds.origin.x, y: -bounds.origin.y)
         
-        if NSThread.currentThread().isMainThread {
+        if Thread.current.isMainThread {
             renderInContext(context)
         } else {
-            dispatch_sync(dispatch_get_main_queue()) {
+			DispatchQueue.main.sync {
                 self.renderInContext(context)
             }
         }
@@ -274,46 +267,46 @@ public class DynamicBlurView: UIView {
         return image
     }
     
-    private func renderInContext(ctx: CGContext!) {
+    fileprivate func renderInContext(_ ctx: CGContext!) {
         let layers = prepareLayer()
         
-        if fullScreenCapture && dynamicMode == .None {
-            if let superview = superview {
+		if fullScreenCapture && dynamicMode == .none {
+			if let superview = superview {
                 UIView.setAnimationsEnabled(false)
-                superview.drawViewHierarchyInRect(superview.bounds, afterScreenUpdates: true)
+                superview.drawHierarchy(in: superview.bounds, afterScreenUpdates: true)
                 UIView.setAnimationsEnabled(true)
             }
         } else {
-            superview?.layer.renderInContext(ctx)
+            superview?.layer.render(in: ctx)
         }
         
         if let layers = layers {
-            restoreLayer(layers)
+            restoreLayers(layers)
         }
     }
     
-    func displayDidRefresh(displayLink: CADisplayLink) {
-        displayLayer(blurLayer)
+    func displayDidRefresh(_ displayLink: CADisplayLink) {
+        display(blurLayer)
     }
 }
 
 public extension UIImage {
-    func blurredImage(radius: CGFloat, iterations: Int, ratio: CGFloat, blendColor: UIColor?) -> UIImage? {
+    func blurredImage(_ radius: CGFloat, iterations: Int, ratio: CGFloat, blendColor: UIColor?) -> UIImage? {
         if floorf(Float(size.width)) * floorf(Float(size.height)) <= 0.0 || radius <= 0 {
             return self
         }
         
-		guard let imageRef = self.CGImage else {
+		guard let imageRef = self.cgImage else {
 			return nil
 		}
         var boxSize = UInt32(radius * scale * ratio)
         if boxSize % 2 == 0 {
-            boxSize++
+            boxSize += 1
         }
         
-        let height = CGImageGetHeight(imageRef)
-        let width = CGImageGetWidth(imageRef)
-        let rowBytes = CGImageGetBytesPerRow(imageRef)
+        let height = imageRef.height
+        let width = imageRef.width
+        let rowBytes = imageRef.bytesPerRow
         let bytes = rowBytes * height
         
         let inData = malloc(bytes)
@@ -332,10 +325,12 @@ public extension UIImage {
 			free(inBuffer.data)
 		}
 		
-		guard let provider = CGImageGetDataProvider(imageRef) else {
+		
+		guard let provider = imageRef.dataProvider
+			else {
 			return nil
 		}
-        let copy = CGDataProviderCopyData(provider)
+        let copy = provider.data
         let source = CFDataGetBytePtr(copy)
         memcpy(inBuffer.data, source, bytes)
         
@@ -347,24 +342,23 @@ public extension UIImage {
             inBuffer.data = outBuffer.data
             outBuffer.data = temp
         }
-        
-        
-		guard let colorSpace = CGImageGetColorSpace(imageRef) else {
+		
+		guard let colorSpace = imageRef.colorSpace else {
 			return nil
 		}
-        let bitmapInfo = CGImageGetBitmapInfo(imageRef)
-		guard let bitmapContext = CGBitmapContextCreate(inBuffer.data, width, height, 8, rowBytes, colorSpace, bitmapInfo.rawValue) else {
+        let bitmapInfo = imageRef.bitmapInfo
+		guard let bitmapContext = CGContext(data: inBuffer.data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: rowBytes, space: colorSpace, bitmapInfo: bitmapInfo.rawValue) else {
 			return nil
 		}
 			
         if let color = blendColor {
-            CGContextSetFillColorWithColor(bitmapContext, color.CGColor)
-            CGContextSetBlendMode(bitmapContext, CGBlendMode.PlusLighter)
-            CGContextFillRect(bitmapContext, CGRect(x: 0, y: 0, width: width, height: height))
+            bitmapContext.setFillColor(color.cgColor)
+            bitmapContext.setBlendMode(CGBlendMode.plusLighter)
+            bitmapContext.fill(CGRect(x: 0, y: 0, width: width, height: height))
         }
         
-        if let bitmap = CGBitmapContextCreateImage(bitmapContext) {
-            return UIImage(CGImage: bitmap, scale: scale, orientation: imageOrientation)
+        if let bitmap = bitmapContext.makeImage() {
+            return UIImage(cgImage: bitmap, scale: scale, orientation: imageOrientation)
         }
         
         return nil
