@@ -47,10 +47,16 @@ open class DynamicBlurView: UIView {
         return layer as! BlurLayer
     }
     
-    fileprivate var blurPresentationLayer: BlurLayer {
-		return blurLayer
-    }
-    
+	fileprivate var blurPresentationLayer: BlurLayer {
+		guard let layer = blurLayer.presentation() else {
+			return blurLayer
+		}
+		guard let blayer = layer as? BlurLayer else {
+			return blurLayer
+		}
+		return blayer
+	}
+	
     fileprivate var queue: DispatchQueue {
 		return DispatchQueue.global(qos: DispatchQoS.userInteractive.qosClass)
     }
