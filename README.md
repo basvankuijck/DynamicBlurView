@@ -20,11 +20,17 @@ DynamicBlurView is a dynamic and high performance UIView subclass for Blur.
 * UIToolbar does not use.
 * Can generate a plurality of BlurView.
 
+## Requirements
+
+- Swift 3.0
+- iOS 7.0 or later
+- tvOS 9.0 or later
+
 ## How to Install DynamicBlurView
 
-### iOS 8+
+### iOS 8+, tvOS
 
-#### Cocoapods
+#### CocoaPods
 
 Add the following to your `Podfile`:
 
@@ -113,6 +119,10 @@ var blurRatio: CGFloat
 * Ratio of radius.
 * Defauot is 1.  
 
+```swift
+var quality: CaptureImageQuality
+```
+* Quality of captured image.
 
 ### Function
 
